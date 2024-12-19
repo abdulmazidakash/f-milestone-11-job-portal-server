@@ -10,11 +10,36 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 //middleware
 app.use(cors({
-	origin: ['http://localhost:5176'],
+	origin: ['http://localhost:5173', 'http://localhost:5174', 'https://m-11-job-portal.web.app', 'https://m-11-job-portal.firebaseapp.com', 'https://m-11-job-portal-client.netlify.app'],
 	credentials: true
 }));
 app.use(express.json());
 app.use(cookieParser());
+
+//
+const logger = (req, res, next) =>{
+	console.log('inside the logger');
+	next();
+}
+
+//
+const verifyToken = (req, res, next) =>{
+	console.log('inside the verify token middleware');
+	const token = req?.cookies?.token;
+
+	if(!token){
+		return res.status(401).send({message: 'Unauthorized access'})
+	}
+
+	jwt.verify(token, process.env.JWT_SECRET, (err, decoded) =>{
+		if(err){
+			return res.status(401).send({ message: 'unAuthorized access'})
+		}
+		req.user = decoded;
+		//
+		next();
+	})
+}
 
 
 
@@ -32,22 +57,35 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
 	//jwt auth related apis
 	app.post('/jwt', async(req, res)=>{
 		const user = req.body;
-		const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: '1h'});
+		const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: '5h'});
 		res
 		.cookie('token', token, {
 			httpOnly: true,
-			secure: false, // http://localhost:5176/signIn
+			// secure: false, // http://localhost:5176/signIn
+			secure: process.env.NODE_ENV=== 'production',
+			sameSite: process.env.NODE_ENV === 'production' ? 'none': 'strict',
 		})
 		
 		.send({ success: true});
+	})
+
+	//
+	app.post('/logout', (req, res)=>{
+		res
+		.clearCookie('token', {
+			httpOnly: true,
+			secure: process.env.NODE_ENV=== 'production',
+			sameSite: process.env.NODE_ENV === 'production' ? 'none': 'strict',
+		})
+		.send({ success: true})
 	})
 
 
@@ -58,8 +96,9 @@ async function run() {
 
 
 	//jobs related apis
-	app.get('/jobs' , async(req, res)=>{
+	app.get('/jobs' , logger, async(req, res)=>{
 
+		console.log('now inside the apis callback');
 		const email = req.query.email;
 		let query = {};
 		if(email){
@@ -88,12 +127,15 @@ async function run() {
 
 
 	//job application find specific email data
-	app.get('/job-application', async(req, res) =>{
+	app.get('/job-application', verifyToken, async(req, res) =>{
 		const email = req.query.email;
 		const query = {applicant_email: email};
 
-		console.log('cuk cuk cuk', req.cookies);
-		
+		// console.log('cuk cuk cuk', req.cookies);
+		if(req.user.email !== req.query.email){
+			return res.status(403).send({message: 'forbidden access'});
+		}
+
 		const result = await jobApplicationCollection.find(query).toArray();
 
 		//fokira way to aggregate data
