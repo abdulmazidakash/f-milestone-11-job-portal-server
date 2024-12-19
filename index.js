@@ -37,8 +37,17 @@ async function run() {
 	const jobsCollection = client.db('jobPortal2').collection('jobs2');
 	const jobApplicationCollection = client.db('jobPortal2').collection('job_application2')
 
+
+	//jobs related apis
 	app.get('/jobs' , async(req, res)=>{
-		const cursor = jobsCollection.find();
+
+		const email = req.query.email;
+		let query = {};
+		if(email){
+			query = { hr_email: email}
+		}
+
+		const cursor = jobsCollection.find(query);
 		const result = await cursor.toArray();
 		res.send(result);
 	})
@@ -48,6 +57,13 @@ async function run() {
 		const id = req.params.id;
 		const query = { _id: new ObjectId(id)};
 		const result = await jobsCollection.findOne(query);
+		res.send(result);
+	})
+
+	//create post add job button
+	app.post('/jobs', async(req, res) =>{
+		const newJob = req.body;
+		const result = await jobsCollection.insertOne(newJob);
 		res.send(result);
 	})
 
@@ -72,12 +88,60 @@ async function run() {
 		res.send(result);
 	})
 
+	// app.get('/job-applications/:id') => get specific job application by id 
+	app.get('/job-applications/jobs/:job_id', async(req, res)=>{
+		const jobId = req.params.job_id;
+		const query = { job_id: jobId};
+		const result = await jobApplicationCollection.find(query).toArray();
+		res.send(result);
+	})
+
 	//job application collection apis
 	app.post('/job-applications', async(req, res)=>{
 		const application = req.body;
 		const result = await jobApplicationCollection.insertOne(application);
+
+		//not the best way (use aggregate)
+		const id = application.job_id;
+		const query = { _id: new ObjectId(id)};
+		const job = await jobsCollection.findOne(query);
+		// console.log(job);
+
+		let newCount = 0;
+		if(job.applicationCount){
+			newCount = job.applicationCount + 1;
+		}
+		else{
+			newCount = 1;
+		}
+
+		//now update the job info
+		const filter = { _id: new ObjectId(id)};
+		const updatedDoc = {
+			$set: {
+				applicationCount: newCount
+			}
+		}
+		const updateResult = await jobsCollection.updateOne(filter, updatedDoc)
+
+
 		res.send(result);
 
+	})
+
+
+	//view applications page selected apis
+	app.patch('/job-applications/:id', async(req, res)=>{
+		const id = req.params.id;
+		const data = req.body;
+		const filter = {_id: new ObjectId(id)};
+		const updateDoc = {
+			$set: {
+				status: data.status 
+			}
+		}
+		const result = await jobApplicationCollection.updateOne(filter, updateDoc);
+		res.send(result);
 	})
   } finally {
     // Ensures that the client will close when you finish/error
