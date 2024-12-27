@@ -10,7 +10,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 //middleware
 app.use(cors({
-	origin: ['http://localhost:5173', 'http://localhost:5174', 'https://m-11-job-portal.web.app', 'https://m-11-job-portal.firebaseapp.com', 'https://m-11-job-portal-client.netlify.app'],
+	origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175','https://m-11-job-portal.web.app', 'https://m-11-job-portal.firebaseapp.com', 'https://m-11-job-portal-client.netlify.app'],
 	credentials: true
 }));
 app.use(express.json());
@@ -100,12 +100,36 @@ async function run() {
 
 		console.log('now inside the apis callback');
 		const email = req.query.email;
+		const sort = req.query?.sort;
+		const search = req.query?.search;
+		const min = req.query?.min;
+		const max = req.query?.max;
+
 		let query = {};
+		// console.log(req.query);
+		let sortQuery = {};
 		if(email){
 			query = { hr_email: email}
 		}
 
-		const cursor = jobsCollection.find(query);
+		if(sort == 'true'){
+			sortQuery = {'salaryRange.min': -1};
+		}
+
+		if(search){
+			query.title= {$regex: search, $options: 'i'}
+		}
+
+		if(min & max){
+			query= {
+				...query,
+				'salaryRange.min': {$gte: parseInt(min)},
+				'salaryRange.max': {$lte: parseInt(max)},
+			}
+		}
+		console.log(query);
+
+		const cursor = jobsCollection.find(query).sort(sortQuery);
 		const result = await cursor.toArray();
 		res.send(result);
 	})
